@@ -465,9 +465,17 @@ function getCurrentDaySession(
     session?.crew_id
   );
 
-  if (!leaderId) return sessions[0];
+  const matchingSessions = leaderId
+    ? sessions.filter((row) => firstString(row.crew_leader_id, row.employee_id, row.crew_id) === leaderId)
+    : sessions;
+  const sortedSessions = (matchingSessions.length ? matchingSessions : sessions)
+    .slice()
+    .sort((a, b) => stopUpdatedAtMs(b) - stopUpdatedAtMs(a));
 
-  return sessions.find((row) => firstString(row.crew_leader_id, row.employee_id, row.crew_id) === leaderId) || sessions[0];
+  return sortedSessions.find((row) => {
+    const status = getDayStatus(row);
+    return status === 'working' || status === 'on_lunch';
+  }) || sortedSessions[0] || null;
 }
 
 function updateBootstrapDaySession(
@@ -493,8 +501,9 @@ function updateBootstrapDaySession(
     session?.name
   );
 
+  const appendNewWorkSegment = action === 'clock_in' && currentSession && getDayStatus(currentSession) === 'clocked_out';
   const nextSession: Record<string, unknown> = {
-    ...(currentSession || {}),
+    ...(appendNewWorkSegment ? {} : (currentSession || {})),
     company_id: firstString(currentSession?.company_id, bootstrap.crew_session?.company_id, session?.company_id),
     crew_leader_id: firstString(currentSession?.crew_leader_id, leaderId),
     crew_leader_name: firstString(currentSession?.crew_leader_name, leaderName),
@@ -525,7 +534,7 @@ function updateBootstrapDaySession(
 
   const sessions = getDaySessions(bootstrap);
   const matched = currentSession
-    ? sessions.some((row) => row === currentSession)
+    ? !appendNewWorkSegment && sessions.some((row) => row === currentSession)
     : false;
   const nextSessions = matched
     ? sessions.map((row) => (row === currentSession ? nextSession : row))
@@ -1462,6 +1471,12 @@ export function App() {
   }
 
   async function handleStopAction(action: StopAction, stop: Record<string, unknown>) {
+    if (action === 'start_work' && dayStatus !== 'working') {
+      setStopStateMessage('');
+      setStopStateError(dayStatus === 'on_lunch' ? t.stop.mustResumeWork : t.stop.mustBeClockedIn);
+      return;
+    }
+
     const id = stopId(stop);
     const routeAssignmentId = firstString(stop.route_assignment_id, stop.assignment_id, stop.id);
     const backendAction: CrewStopStateAction = action === 'start_work' ? 'check_in' : 'complete_stop';
@@ -1893,6 +1908,7 @@ export function App() {
   const completedStops = getCompletedStops(stops);
   const remainingStops = Math.max(stops.length - completedStops.length, 0);
   const activeStops = stops.filter((stop) => !isCompletedStop(stop));
+  const isRouteComplete = stops.length > 0 && remainingStops === 0;
   const primaryRoute = routes[0];
   const visibleCrewMembers = Array.isArray(bootstrap?.crew) ? bootstrap.crew : [];
   const visibleCrewMember = visibleCrewMembers[0];
@@ -2006,6 +2022,9 @@ export function App() {
       language,
       t
     );
+    const startBlockedMessage = dayStatus === 'on_lunch'
+      ? t.stop.mustResumeWork
+      : (dayStatus === 'clocked_out' ? t.stop.mustBeClockedIn : '');
 
     return (
       <main className="crew-dashboard-screen">
@@ -2028,7 +2047,7 @@ export function App() {
           </div>
 
           <div className="crew-stop-action-panel">
-            {selectedStopStatus === 'pending' && (
+            {selectedStopStatus === 'pending' && dayStatus === 'working' && (
               <button
                 className="crew-primary-button"
                 disabled={isSavingStopState}
@@ -2037,6 +2056,21 @@ export function App() {
               >
                 {isSavingStopState ? t.stop.savingWork : t.stop.startWork}
               </button>
+            )}
+            {selectedStopStatus === 'pending' && dayStatus !== 'working' && (
+              <>
+                <p className="crew-error">{startBlockedMessage || t.stop.mustBeClockedIn}</p>
+                {dayStatus === 'on_lunch' ? (
+                  <button className="crew-primary-button" disabled={isSavingDayState} onClick={() => void handleDayAction('lunch_end')} type="button">
+                    {t.day.resumeWork}
+                  </button>
+                ) : null}
+                {dayStatus === 'clocked_out' && !isRouteComplete ? (
+                  <button className="crew-primary-button" disabled={isSavingDayState} onClick={() => void handleDayAction('clock_in')} type="button">
+                    {t.day.clockInAgain}
+                  </button>
+                ) : null}
+              </>
             )}
             {selectedStopStatus === 'inProgress' && (
               <button
@@ -2442,7 +2476,7 @@ export function App() {
             {dayStatus === 'on_lunch' ? (
               <>
                 <button className="crew-primary-button" disabled={isSavingDayState} onClick={() => void handleDayAction('lunch_end')} type="button">
-                  {t.day.resume}
+                  {t.day.resumeWork}
                 </button>
                 <button className="crew-secondary-button crew-day-secondary-button" disabled={isSavingDayState} onClick={() => void handleDayAction('clock_out')} type="button">
                   {t.day.clockOut}
@@ -2452,15 +2486,18 @@ export function App() {
 
             {dayStatus === 'clocked_out' ? (
               <>
-                <div className="crew-day-completed">{t.day.dayCompleted}</div>
-                <button
-                  className="crew-primary-button"
-                  disabled={isSavingDayState}
-                  onClick={() => void handleDayAction('reopen_day')}
-                  type="button"
-                >
-                  {t.day.resumeDay}
-                </button>
+                {isRouteComplete ? (
+                  <div className="crew-day-completed">{t.day.dayCompleted}</div>
+                ) : (
+                  <button
+                    className="crew-primary-button"
+                    disabled={isSavingDayState}
+                    onClick={() => void handleDayAction('clock_in')}
+                    type="button"
+                  >
+                    {t.day.clockInAgain}
+                  </button>
+                )}
               </>
             ) : null}
           </div>

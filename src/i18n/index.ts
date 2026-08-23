@@ -53,6 +53,7 @@ export type Translations = {
     clockInAgain: string;
     lunch: string;
     resume: string;
+    resumeWork: string;
     clockOut: string;
     notAvailable: string;
     noLunchTaken: string;
@@ -124,6 +125,8 @@ export type Translations = {
     startWorkSuccess: string;
     finishWorkSuccess: string;
     updateFailed: string;
+    mustBeClockedIn: string;
+    mustResumeWork: string;
     actionDiagnostics: string;
     beforePhotos: string;
     afterPhotos: string;
