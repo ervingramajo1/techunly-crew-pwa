@@ -1,0 +1,9 @@
+name = "techunly-crew-api-proxy"
+main = "src/worker.ts"
+compatibility_date = "2026-05-31"
+
+[vars]
+ALLOWED_ORIGINS = "http://localhost:5174"
+
+# Set this as a secret before deploy:
+# wrangler secret put APPS_SCRIPT_URL --config cloudflare-worker/wrangler.toml.example

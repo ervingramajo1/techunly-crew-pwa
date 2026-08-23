@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.wrangler/
+cloudflare-worker/.wrangler/
+.env
+.env.*
+!.env.example
+cloudflare-worker/.dev.vars
+*.tsbuildinfo
+*.log
